@@ -1,0 +1,791 @@
+using System;
+using System.IO;
+using System.Collections.Generic;
+
+namespace Quarto_neuralNet
+{
+    class Program
+    {
+        static piece[] pieces = new piece[16]; //the 16 different pieces.
+        static int[] squares = new int[16]; //the 16 squares of the board.
+        static int squares_available;
+        static int m = 100;
+        static double eta = 0.0015;
+        static double lambda = 1;
+        //layer 0
+        static double[,] A0 = new double[m, 64];
+        //layer 1
+        static int L1size=4;
+        static double[,] W1 = new double[L1size, 64];
+        static double[] B1 = new double[L1size];
+        static double[,] Z1 = new double[m, L1size];
+        static double[,] A1 = new double[m, L1size];
+        static double[,] D1 = new double[m, L1size];
+        //layer 2
+        static int L2size=4;
+        static double[,] W2 = new double[L2size, L1size];
+        static double[] B2 = new double[L2size];
+        static double[,] Z2 = new double[m, L2size];
+        static double[,] A2 = new double[m, L2size];
+        static double[,] D2 = new double[m, L2size];
+        //layer 3
+        static int L3size=4;
+        static double[,] W3 = new double[L3size, L2size];
+        static double[] B3 = new double[L3size];
+        static double[,] Z3 = new double[m, L3size];
+        static double[,] A3 = new double[m, L3size];
+        static double[,] D3 = new double[m, L3size];
+        //layer 4
+        static double[,] W4 = new double[3, L3size];
+        static double[] B4 = new double[3];
+        static double[,] Z4 = new double[m, 3];
+        static double[,] A4 = new double[m, 3];
+        static double[,] D4 = new double[m, 3];
+
+        static void Main(string[] args)
+        {
+            double[] Y = new double[3];
+
+            for(int o=0; o<100; o++)
+            {
+                double averageCost = 0;
+
+                ReadParameters();
+                for (int t = 0; t < m; t++)
+                {
+                    GeneratePosition();
+                    Y = EvaluatePosition(squares, pieces);
+                    //Console.Clear();
+                    //Console.WriteLine("Result: [ " + Y[0] + ", " + Y[1] + ", " + Y[2] + " ]");
+                    SetActivationLayer0(t);
+                    FeedForward(t);
+                    //Console.WriteLine("Network's prediction: [ " + A3[t, 0] + ", " + A3[t, 1] + ", " + A3[t, 2] + " ]");
+                    //Console.WriteLine("Cost: " + CostFunction(Y, A3, t));
+                    averageCost = averageCost + CostFunction(Y, A4, t);
+                    Backpropagation(t, Y);
+                    //Console.ReadLine();
+                }
+                Console.Clear();
+                Console.WriteLine("Result: [ " + Y[0] + ", " + Y[1] + ", " + Y[2] + " ]");
+                Console.WriteLine("Network's prediction: [ " + A4[m-1, 0] + ", " + A4[m-1, 1] + ", " + A4[m-1, 2] + " ]");
+                Console.WriteLine("Average Cost: " + averageCost/m);
+                Console.WriteLine("Training set #" + o);
+                UpdateParameters();
+                UpdateFile();
+                //Console.ReadLine();
+            }
+        }
+        static void UpdateFile()
+        {
+            StreamWriter writer = new StreamWriter("NN_Parameters.csv");
+            for (int j = 0; j < L1size; j++)//writes weights 1st layer
+            {
+                for (int k = 0; k < 64; k++)
+                {
+                    writer.Write(W1[j, k]);
+                    writer.Write(", ");
+                }
+                writer.WriteLine();
+            }
+            for (int j = 0; j < L1size; j++)//writes biases 1st layer
+            {
+                writer.Write(B1[j]);
+                writer.WriteLine(", ");
+            }
+            for (int j = 0; j < L2size; j++)//writes weights 2nd layer
+            {
+                for (int k = 0; k < L1size; k++)
+                {
+                    writer.Write(W2[j, k]);
+                    writer.Write(", ");
+                }
+                writer.WriteLine();
+            }
+            for (int j = 0; j < L2size; j++)//writes biases 2nd layer
+            {
+                writer.Write(B2[j]);
+                writer.WriteLine(", ");
+            }
+            for (int j = 0; j < L3size; j++)//writes weights 3rd layer
+            {
+                for (int k = 0; k < L2size; k++)
+                {
+                    writer.Write(W3[j, k]);
+                    writer.Write(", ");
+                }
+                writer.WriteLine();
+            }
+            for (int j = 0; j < L3size; j++)//writes biases 3rd layer
+            {
+                writer.Write(B3[j]);
+                writer.WriteLine(", ");
+            }
+            for (int j = 0; j < 3; j++)//writes weights 4th layer
+            {
+                for (int k = 0; k < L3size; k++)
+                {
+                    writer.Write(W4[j, k]);
+                    writer.Write(", ");
+                }
+                writer.WriteLine();
+            }
+            for (int j = 0; j < 3; j++)//writes biases 4th layer
+            {
+                writer.Write(B4[j]);
+                writer.WriteLine(", ");
+            }
+            writer.Close();
+        }
+        static void UpdateParameters()
+        {
+            //for layer 1 weights
+            for(int j=0; j<L1size; j++)
+            {
+                for(int k=0; k<64; k++)
+                {
+                    double G = 0;
+                    for(int t=0; t<m; t++)
+                    {
+                        G = G + A0[t, k] * D1[t, j];
+                    }
+                    G = G * eta / m;
+                    W1[j, k] = W1[j, k]  - G;
+                }
+            }
+            //for layer 2 weights
+            for (int j = 0; j < L2size; j++)
+            {
+                for (int k = 0; k < L1size; k++)
+                {
+                    double G = 0;
+                    for (int t = 0; t < m; t++)
+                    {
+                        G = G + A1[t, k] * D2[t, j];
+                    }
+                    G = G * eta / m;
+                    W2[j, k] = W2[j, k] - G;
+                }
+            }
+            //for layer 3 weights
+            for (int j = 0; j < L3size; j++)
+            {
+                for (int k = 0; k < L2size; k++)
+                {
+                    double G = 0;
+                    for (int t = 0; t < m; t++)
+                    {
+                        G = G + A2[t, k] * D3[t, j];
+                    }
+                    G = G * eta / m;
+                    W3[j, k] = W3[j, k]  - G;
+                }
+            }
+            //for layer 4 weights
+            for (int j = 0; j < 3; j++)
+            {
+                for (int k = 0; k < L3size; k++)
+                {
+                    double G = 0;
+                    for (int t = 0; t < m; t++)
+                    {
+                        G = G + A3[t, k] * D4[t, j];
+                    }
+                    G = G * eta / m;
+                    W4[j, k] = W4[j, k] - G;
+                }
+            }
+            //for layer 1 biases
+            for (int j=0; j<L1size; j++)
+            {
+                double G = 0;
+                for(int t=0; t<m; t++)
+                {
+                    G = G + D1[t, j];
+                }
+                G = G * eta / m;
+                B1[j] = B1[j] - G;
+            }
+            //for layer 2 biases
+            for (int j = 0; j < L2size; j++)
+            {
+                double G = 0;
+                for (int t = 0; t < m; t++)
+                {
+                    G = G + D2[t, j];
+                }
+                G = G * eta / m;
+                B2[j] = B2[j] - G;
+            }
+            //for layer 3 biases
+            for (int j = 0; j < L3size; j++)
+            {
+                double G = 0;
+                for (int t = 0; t < m; t++)
+                {
+                    G = G + D3[t, j];
+                }
+                G = G * eta / m;
+                B3[j] = B3[j] - G;
+            }
+            //for layer 4 biases
+            for (int j = 0; j < 3; j++)
+            {
+                double G = 0;
+                for (int t = 0; t < m; t++)
+                {
+                    G = G + D4[t, j];
+                }
+                G = G * eta / m;
+                B4[j] = B4[j] - G;
+            }
+        }
+        static void Backpropagation(int t, double[] Y)
+        {
+            //for layer 4
+            for (int j = 0; j < 3; j++)
+            {
+                D4[t, j] = (A4[t, j] - Y[j]) * sigmoidPrime(Z4[t, j]);
+            }
+            //for layer 2
+            for (int j = 0; j < L3size; j++)
+            {
+                D3[t, j] = 0;
+                for (int k = 0; k < 3; k++)
+                {
+                    D3[t, j] = D3[t, j] + W4[k, j] * D4[t, k];
+                }
+                D3[t, j] = D3[t, j] * sigmoidPrime(Z3[t, j]);
+            }
+            //for layer 2
+            for (int j=0; j<L2size; j++)
+            {
+                D2[t, j] = 0;
+                for(int k=0; k<L3size; k++)
+                {
+                    D2[t, j] = D2[t, j] + W3[k, j] * D3[t, k];
+                }
+                D2[t, j] = D2[t, j] * sigmoidPrime(Z2[t, j]);
+            }
+            //for layer 1
+            for (int j = 0; j < L1size; j++)
+            {
+                D1[t, j] = 0;
+                for (int k = 0; k < L2size; k++)
+                {
+                    D1[t, j] = D1[t, j] + W2[k, j] * D2[t, k];
+                }
+                D1[t, j] = D1[t, j] * sigmoidPrime(Z1[t, j]);
+            }
+        }
+        static double CostFunction(double[] Real, double[,] Network, int t)
+        {
+            return ((Network[t, 0] - Real[0]) * (Network[t, 0] - Real[0]) +
+                (Network[t, 1] - Real[1]) * (Network[t, 1] - Real[1]) +
+                (Network[t, 2] - Real[2]) * (Network[t, 2] - Real[2]))*0.5;
+        }
+        static void FeedForward(int t)
+        {
+            //for layer 1
+            for(int j=0; j<L1size; j++)
+            {
+                Z1[t, j] = 0;
+                for(int k=0; k<64; k++)
+                {
+                    Z1[t, j] = Z1[t, j] + W1[j, k] * A0[t, k];
+                }
+                Z1[t, j] = Z1[t, j] + B1[j];
+                A1[t, j] = sigmoid(Z1[t, j]);
+            }
+            //for layer 2
+            for (int j = 0; j < L2size; j++)
+            {
+                Z2[t, j] = 0;
+                for (int k = 0; k < L1size; k++)
+                {
+                    Z2[t, j] = Z2[t, j] + W2[j, k] * A1[t, k];
+                }
+                Z2[t, j] = Z2[t, j] + B2[j];
+                A2[t, j] = sigmoid(Z2[t, j]);
+            }
+            //for layer 3
+            for (int j = 0; j < L3size; j++)
+            {
+                Z3[t, j] = 0;
+                for (int k = 0; k < L2size; k++)
+                {
+                    Z3[t, j] = Z3[t, j] + W3[j, k] * A2[t, k];
+                }
+                Z3[t, j] = Z3[t, j] + B3[j];
+                A3[t, j] = sigmoid(Z3[t, j]);
+            }
+            //for layer 4
+            for (int j = 0; j < 3; j++)
+            {
+                Z4[t, j] = 0;
+                for (int k = 0; k < L3size; k++)
+                {
+                    Z4[t, j] = Z4[t, j] + W4[j, k] * A3[t, k];
+                }
+                Z4[t, j] = Z4[t, j] + B4[j];
+                A4[t, j] = sigmoid(Z4[t, j]);
+            }
+        }
+        static void SetActivationLayer0(int t)
+        {
+            for(int i=0; i<16; i++)
+            {
+                if(squares[i]==-1)
+                {
+                    A0[t, 4 * i] = 0;
+                    A0[t, 4 * i + 1] = 0;
+                    A0[t, 4 * i + 2] = 0;
+                    A0[t, 4 * i + 3] = 0;
+                }
+                else
+                {
+                    A0[t, 4 * i] = (double)pieces[squares[i]].array[0] / 2 + 0.5;
+                    A0[t, 4 * i + 1] = (double)pieces[squares[i]].array[1] / 2 + 0.5;
+                    A0[t, 4 * i + 2] = (double)pieces[squares[i]].array[2] / 2 + 0.5;
+                    A0[t, 4 * i + 3] = (double)pieces[squares[i]].array[3] / 2 + 0.5;
+                }
+            }
+        }
+        static void ReadParameters()
+        {
+            StreamReader reader = new StreamReader("NN_Parameters.csv");
+
+            for(int j=0; j<L1size; j++)//weights on Layer 1
+            {
+                string[] datos;
+                string s = "";
+                s = reader.ReadLine();
+                datos = s.Split(new char[] { ',' });
+                for(int k=0; k<64; k++)
+                {
+                    W1[j, k] = Double.Parse(datos[k]);
+                }
+            }
+            for (int j = 0; j < L1size; j++)//biases on Layer 1
+            {
+                string[] datos;
+                string s = "";
+                s = reader.ReadLine();
+                datos = s.Split(new char[] { ',' });
+                B1[j] = Double.Parse(datos[0]);
+            }
+            for (int j = 0; j < L2size; j++)//weights on Layer 2
+            {
+                string[] datos;
+                string s = "";
+                s = reader.ReadLine();
+                datos = s.Split(new char[] { ',' });
+                for (int k = 0; k < L1size; k++)
+                {
+                    W2[j, k] = Double.Parse(datos[k]);
+                }
+            }
+            for (int j = 0; j < L2size; j++)//biases on Layer 2
+            {
+                string[] datos;
+                string s = "";
+                s = reader.ReadLine();
+                datos = s.Split(new char[] { ',' });
+                B2[j] = Double.Parse(datos[0]);
+            }
+            for (int j = 0; j < L3size; j++)//weights on Layer 3
+            {
+                string[] datos;
+                string s = "";
+                s = reader.ReadLine();
+                datos = s.Split(new char[] { ',' });
+                for (int k = 0; k < L2size; k++)
+                {
+                    W3[j, k] = Double.Parse(datos[k]);
+                }
+            }
+            for (int j = 0; j < L3size; j++)//biases on Layer 3
+            {
+                string[] datos;
+                string s = "";
+                s = reader.ReadLine();
+                datos = s.Split(new char[] { ',' });
+                B3[j] = Double.Parse(datos[0]);
+            }
+            for (int j = 0; j < 3; j++)//weights on Layer 4
+            {
+                string[] datos;
+                string s = "";
+                s = reader.ReadLine();
+                datos = s.Split(new char[] { ',' });
+                for (int k = 0; k < L3size; k++)
+                {
+                    W4[j, k] = Double.Parse(datos[k]);
+                }
+            }
+            for (int j = 0; j < 3; j++)//biases on Layer 4
+            {
+                string[] datos;
+                string s = "";
+                s = reader.ReadLine();
+                datos = s.Split(new char[] { ',' });
+                B4[j] = Double.Parse(datos[0]);
+            }
+            reader.Close();
+        }
+        static double sigmoid(double x)
+        {
+            double y;
+
+            y = 1 + Math.Exp(-x);
+            return 1 / y;
+        }
+        static double sigmoidPrime(double x)
+        {
+            double y;
+
+            y = Math.Exp(-x);
+            return y / ((1 + y) * (1 + y));
+        }
+        static void GeneratePieces()
+        {
+            for (int i = 0; i < 16; i++)//generates pieces
+            {
+                int a, b, c;
+                c = (i - i % 2) / 2;
+                b = (c - c % 2) / 2;
+                a = (b - b % 2) / 2;
+                pieces[i] = new piece(a % 2, b % 2, c % 2, i % 2, i);
+                squares[i] = -1; //the value of -1 indicates that the square is empty.
+                                 //a value between 0 and 15 indicates the id of the piece in it.
+            }
+        }
+        static int[] GeneratePosition()
+        {
+            int[] position = new int[16];
+            bool valid_position=true;
+            //int numberoftries=0;
+
+            do
+            {
+                valid_position = true;
+                GeneratePieces();
+                //Console.Clear();
+                squares_available = 0;
+                /*Console.WriteLine("Write the position");
+                for (int i = 0; i < 16; i++)
+                {
+                    position[i] = Int32.Parse(Console.ReadLine());
+                }*/
+                position = RandomizePosition();
+                for (int i = 0; i < 16; i++)
+                {
+                    if (position[i] == -1) squares_available++;
+                    else
+                    {
+                        squares[i] = position[i];
+                        pieces[squares[i]].place = i;
+                    }
+                }
+                //numberoftries++;
+                if (squares_available >= 8) valid_position = false;
+                else if (End(squares, pieces)) valid_position = false;
+                /*if(valid_position==true)
+                {
+                    Console.WriteLine("This is the position");
+                    PrintBoard();
+                    //Console.WriteLine(numberoftries);
+                    Console.WriteLine(squares_available);
+                    Console.ReadLine();
+                }*/
+            } while (valid_position == false);
+
+            return position;
+        }
+        static int[] RandomizePosition()
+        {
+            List<int> numbers = new List<int>();
+            Random r = new Random();
+            int[] pos = new int[16];
+
+            for (int i = 0; i < 16; i++) numbers.Add(i);
+            for(int j=0; j<16; j++)
+            {
+                if (r.Next(0, 2) == 0)
+                {
+                    pos[j] = -1;
+                }
+                else
+                {
+                    int x = r.Next(0, numbers.Count);
+
+                    pos[j] = numbers[x];
+                    numbers.Remove(numbers[x]);
+                }
+            }
+            return pos;
+        }
+        static double[] EvaluatePosition(int[] sq, piece[] p)
+        {
+            int bestScore = -10000;
+            int score;
+
+            for(int j=0; j<16; j++)
+            {
+                if(p[j].place==-1)
+                {
+                    score=Minimax(1, -1, p[j], p, sq, -10000, 10000, -1);
+                    bestScore = Math.Max(score, bestScore);
+                    if (bestScore == 1) break;
+                }
+            }
+            if(bestScore==-1)
+            {
+                return new double[] { 1, 0, 0 };
+            }
+            else if (bestScore == 0)
+            {
+                return new double[] { 0, 1, 0 };
+            }
+            else if (bestScore == 1)
+            {
+                return new double[] { 0, 0, 1 };
+            }
+            else
+            {
+                return new double[] { 0, 0, 0 };
+            }
+        }
+        static int Minimax(int depth, int turn, piece tP, piece[] p, int[] sq, int alpha, int beta, int LSF)
+        {
+            int bestScore = -turn;
+            int score;
+            if (LSF!=-1&&Check(LSF, sq, p)) return -turn;
+            else if (squares_available - depth <= 0)
+            {
+                for (int i = 0; i < 16; i++)
+                {
+                    if (sq[i] == -1)
+                    {
+                        tP.place = i;
+                        sq[i] = tP.id;
+                        if (Check(i, sq, p))
+                        {
+                            tP.place = -1;
+                            sq[i] = -1;
+                            return turn;
+                        }
+                        tP.place = -1;
+                        sq[i] = -1;
+                    }
+                }
+                return 0;
+            }
+            for (int i = 0; i < 16; i++)
+            {
+                for (int j = 0; j < 16; j++)
+                {
+                    if (sq[i] == -1 && p[j].place == -1 && j != tP.id)
+                    {
+                        tP.place = i;
+                        sq[i] = tP.id;
+                        score = Minimax(depth + 1, -turn, p[j], p, sq, alpha, beta, i);
+                        bestScore = turn * Math.Max(score * turn, bestScore * turn);
+                        tP.place = -1;
+                        sq[i] = -1;
+                        if (turn == 1)
+                        {
+                            if (bestScore == 1) return bestScore;
+                            alpha = Math.Max(score, alpha);
+                            if (beta <= alpha) return bestScore;
+                        }
+                        else if (turn == -1)
+                        {
+                            if (bestScore == -1) return bestScore;
+                            beta = Math.Min(score, beta);
+                            if (beta <= alpha) return bestScore;
+                        }
+                    }
+                }
+            }
+            return bestScore;
+        }
+        static void PrintBoard()
+        {
+            string[,] b = new string[16, 4];
+
+            for (int i = 0; i < 16; i++)
+            {
+                if (squares[i] != -1)
+                {
+                    for (int j = 0; j < 4; j++)
+                    {
+                        b[i, j] = "" + pieces[squares[i]].array[j];
+                    }
+                }
+                else
+                {
+                    for (int j = 0; j < 4; j++)
+                    {
+                        b[i, j] = " ";
+                    }
+                }
+            }
+
+            Console.WriteLine(" " + b[0, 0] + b[0, 1] + "  | " + b[1, 0] + b[1, 1] + "  | " + b[2, 0] + b[2, 1] + "  | " + b[3, 0] + b[3, 1]);
+            Console.WriteLine(" " + b[0, 2] + b[0, 3] + "  | " + b[1, 2] + b[1, 3] + "  | " + b[2, 2] + b[2, 3] + "  | " + b[3, 2] + b[3, 3]);
+            Console.WriteLine("_____|_____|_____|_____");
+            Console.WriteLine(" " + b[4, 0] + b[4, 1] + "  | " + b[5, 0] + b[5, 1] + "  | " + b[6, 0] + b[6, 1] + "  | " + b[7, 0] + b[7, 1]);
+            Console.WriteLine(" " + b[4, 2] + b[4, 3] + "  | " + b[5, 2] + b[5, 3] + "  | " + b[6, 2] + b[6, 3] + "  | " + b[7, 2] + b[7, 3]);
+            Console.WriteLine("_____|_____|_____|_____");
+            Console.WriteLine(" " + b[8, 0] + b[8, 1] + "  | " + b[9, 0] + b[9, 1] + "  | " + b[10, 0] + b[10, 1] + "  | " + b[11, 0] + b[11, 1]);
+            Console.WriteLine(" " + b[8, 2] + b[8, 3] + "  | " + b[9, 2] + b[9, 3] + "  | " + b[10, 2] + b[10, 3] + "  | " + b[11, 2] + b[11, 3]);
+            Console.WriteLine("_____|_____|_____|_____");
+            Console.WriteLine(" " + b[12, 0] + b[12, 1] + "  | " + b[13, 0] + b[13, 1] + "  | " + b[14, 0] + b[14, 1] + "  | " + b[15, 0] + b[15, 1]);
+            Console.WriteLine(" " + b[12, 2] + b[12, 3] + "  | " + b[13, 2] + b[13, 3] + "  | " + b[14, 2] + b[14, 3] + "  | " + b[15, 2] + b[15, 3]);
+            Console.WriteLine("     |     |     |     ");
+        }
+        static bool Check(int LSF, int[] sq, piece[] p) //LSF for Last Square Filled
+        {
+            int r = LSF % 4;
+            int q = LSF - r;
+            if (sq[q] != -1 && sq[q + 1] != -1 && sq[q + 2] != -1 && sq[q + 3] != -1)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[sq[q]].array[j] == p[sq[q + 1]].array[j] &&
+                        p[sq[q]].array[j] == p[sq[q + 2]].array[j] &&
+                        p[sq[q]].array[j] == p[sq[q + 3]].array[j]
+                        )
+                    {
+                        return true;
+                    }
+                }
+            }
+            if (sq[r] != -1 && sq[r + 4] != -1 && sq[r + 8] != -1 && sq[r + 12] != -1)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[sq[r]].array[j] == p[sq[r + 4]].array[j] &&
+                        p[sq[r]].array[j] == p[sq[r + 8]].array[j] &&
+                        p[sq[r]].array[j] == p[sq[r + 12]].array[j]
+                        )
+                    {
+                        return true;
+                    }
+                }
+            }
+            if (LSF % 5 == 0 && sq[0] != -1 && sq[5] != -1 && sq[10] != -1 && sq[15] != -1)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[sq[0]].array[j] == p[sq[5]].array[j] &&
+                        p[sq[0]].array[j] == p[sq[10]].array[j] &&
+                        p[sq[0]].array[j] == p[sq[15]].array[j]
+                        )
+                    {
+                        return true;
+                    }
+                }
+            }
+            else if (LSF % 3 == 0 && sq[3] != -1 && sq[6] != -1 && sq[9] != -1 && sq[12] != -1)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[sq[3]].array[j] == p[sq[6]].array[j] &&
+                        p[sq[3]].array[j] == p[sq[9]].array[j] &&
+                        p[sq[3]].array[j] == p[sq[12]].array[j]
+                        )
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        static bool End(int[] board, piece[] p)
+        {
+            bool end = true;
+            for(int i=0; i<16; i++)
+            {
+                if (board[i] == -1)
+                {
+                    end = false;
+                    break;
+                }
+            }
+            if (end) return end;
+            for (int i = 0; i < 4; i++)
+            {
+                if (board[4 * i] == -1 || board[4 * i + 1] == -1 || board[4 * i + 2] == -1 || board[4 * i + 3] == -1) { }
+                else
+                {
+                    for (int j = 0; j < 4; j++)
+                    {
+                        if (
+                            p[board[4 * i]].array[j] == p[board[4 * i + 1]].array[j] &&
+                            p[board[4 * i]].array[j] == p[board[4 * i + 2]].array[j] &&
+                            p[board[4 * i]].array[j] == p[board[4 * i + 3]].array[j]
+                            )
+                        {
+                            end = true;
+                            return end;
+                        }
+                    }
+                }
+                if (board[i] == -1 || board[4 + i] == -1 || board[8 + i] == -1 || board[12 + i] == -1) { }
+                else
+                {
+                    for (int j = 0; j < 4; j++)
+                    {
+                        if (
+                            p[board[i]].array[j] == p[board[4 + i]].array[j] &&
+                            p[board[i]].array[j] == p[board[8 + i]].array[j] &&
+                            p[board[i]].array[j] == p[board[12 + i]].array[j]
+                            )
+                        {
+                            end = true;
+                            return end;
+                        }
+                    }
+                }
+            }
+            if (board[0] == -1 || board[5] == -1 || board[10] == -1 || board[15] == -1) { }
+            else
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[board[0]].array[j] == p[board[5]].array[j] &&
+                        p[board[0]].array[j] == p[board[10]].array[j] &&
+                        p[board[0]].array[j] == p[board[15]].array[j]
+                        )
+                    {
+                        end = true;
+                        return end;
+                    }
+                }
+            }
+            if (board[3] == -1 || board[6] == -1 || board[9] == -1 || board[12] == -1) { }
+            else
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[board[3]].array[j] == p[board[6]].array[j] &&
+                        p[board[3]].array[j] == p[board[9]].array[j] &&
+                        p[board[3]].array[j] == p[board[12]].array[j]
+                        )
+                    {
+                        end = true;
+                        return end;
+                    }
+                }
+            }
+            return end;
+        }
+    }
+}
