@@ -1,0 +1,367 @@
+using System;
+using System.Collections.Generic;
+
+namespace Quarto4
+{
+  public class piece
+    {
+        public int[] array;
+        public int id;
+        public int place;
+
+        public piece(int a, int b, int c, int d, int i)
+        {
+            array = new int[] { a, b, c, d };
+            id = i;
+            place = -1;
+        }
+    }
+    class Program
+    {
+        static piece[] pieces = new piece[16]; //the 16 different pieces.
+        static int[] squares = new int[16]; //the 16 squares of the board.
+        static int winner = 0; //valued on 0 if there is no winner. 1 if AI wins, -1 if player wins.
+        static int NOC; //NOC for Number Of Calculations
+        static piece toPlace;
+        static bool beginning = true;
+        static int squares_available = 16;
+
+        static void Main(string[] args)
+        {
+            GeneratePieces();
+            PrintBoard();
+            Console.WriteLine("Who starts? '1' for AI, anything else for player");
+            string s = Console.ReadLine();
+            if (s == "1")
+            {
+                AIPlays();
+                PrintBoard();
+                squares_available--;
+            }
+            while (winner==0&&squares_available>0)
+            {
+                playerPlays();
+                //AIPlays();
+                PrintBoard();
+                squares_available--;
+                Console.WriteLine(squares_available);
+                Console.WriteLine(NOC);
+                Console.ReadLine();
+                if (squares_available == 0 || winner != 0) break;
+                AIPlays();
+                PrintBoard();
+                squares_available--;
+                Console.WriteLine(squares_available);
+                Console.WriteLine(NOC);
+                Console.ReadLine();
+            }
+            Console.WriteLine("The game has ended. The winner is: " + winner);
+            Console.ReadLine();
+        }
+        static void playerPlays()
+        {
+            if (beginning)
+            {
+                Console.WriteLine("Choose piece (write 4 digits)");
+                string s = Console.ReadLine();
+                int[] t = new int[4];
+                for (int i = 0; i < 4; i++)
+                {
+                    t[i] = (int)s[i] - 48;
+                }
+                toPlace = pieces[8 * t[0] + 4 * t[1] + 2 * t[2] + t[3]];
+                beginning = false;
+            }
+            else if(squares_available==1)
+            {
+                int n;
+                Console.WriteLine("You have the piece: " + toPlace.array[0] + toPlace.array[1] + toPlace.array[2] + toPlace.array[3]);
+                Console.WriteLine("Choose place (write number)");
+                do
+                {
+                    string s = Console.ReadLine();
+                    n = Int32.Parse(s);
+                } while (n < 0 || n >= 16 || squares[n] != -1);
+                toPlace.place = n;
+                squares[n] = toPlace.id;
+                if (Check(n, squares, pieces)) winner = -1;
+                PrintBoard();
+            }
+            else
+            {
+                int n;
+                Console.WriteLine("You have the piece: " + toPlace.array[0] + toPlace.array[1] + toPlace.array[2] + toPlace.array[3]);
+                Console.WriteLine("Choose place (write number)");
+                do
+                {
+                    string s = Console.ReadLine();
+                    n = Int32.Parse(s);
+                } while (n < 0 || n >= 16 || squares[n] != -1);
+                toPlace.place = n;
+                squares[n] = toPlace.id;
+                if (Check(n, squares, pieces)) winner = -1;
+                PrintBoard();
+                if(winner==0)
+                {
+                    Console.WriteLine("Choose piece (write 4 digits)");
+                    int[] t = new int[4];
+                    do
+                    {
+                        string s = Console.ReadLine();
+                        for (int i = 0; i < 4; i++)
+                        {
+                            t[i] = (int)s[i] - 48;
+                        }
+                    } while (pieces[8 * t[0] + 4 * t[1] + 2 * t[2] + t[3]].place != -1);
+                    toPlace = pieces[8 * t[0] + 4 * t[1] + 2 * t[2] + t[3]];
+                }
+            }
+        }
+        static void AIPlays()
+        {
+            int bestScore = -1000000;
+            bool foundWinningLine = false;
+            int score;
+            int bestPlace = -1;
+            piece bestPiece = pieces[0];
+            NOC = 0;
+            /*List<int[]> bestMoves = new List<int[]>();
+            Random r = new Random();*/
+
+            if (beginning)
+            {
+                toPlace = pieces[0];
+                beginning = false;
+            }
+            else if (squares_available == 1)
+            {
+                for (int i = 0; i < 16; i++)
+                {
+                    if(squares[i]==-1)
+                    {
+                        NOC++;
+                        toPlace.place = i;
+                        squares[i] = toPlace.id;
+                        if (Check(i, squares, pieces)) winner = 1;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < 16; i++)
+                {
+                    for (int j = 0; j < 16; j++)
+                    {
+                        if (squares[i] == -1 && pieces[j].place == -1 && j != toPlace.id)
+                        {
+                            toPlace.place = i;
+                            squares[i] = toPlace.id;
+                            NOC++;
+                            score = Minimax(1, -1, pieces[j], pieces, squares, -10000000, 10000000, i);
+                            if (score > bestScore)
+                            {
+                                bestScore = score;
+                                bestPlace = i;
+                                bestPiece = pieces[j];
+                                /*bestMoves.Clear();
+                                bestMoves.Add(new int[] { i, j });*/
+                            }
+                            /*if(score==bestScore)
+                            {
+                                bestMoves.Add(new int[] { i, j });
+                            }*/
+                            toPlace.place = -1;
+                            squares[i] = -1;
+                            if (bestScore == 1)
+                            {
+                                foundWinningLine = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (foundWinningLine) break;
+                }
+                toPlace.place = bestPlace;
+                squares[bestPlace] = toPlace.id;
+                if (Check(bestPlace, squares, pieces)) winner = 1;
+                toPlace = bestPiece;
+                /*int move = r.Next(0, bestMoves.Count);
+                toPlace.place = bestMoves[move][0];
+                squares[toPlace.place] = toPlace.id;
+                if (Check(toPlace.place)) winner = 1;
+                toPlace = pieces[bestMoves[move][1]];*/
+                    Console.WriteLine("Best Score: "+ bestScore);
+                    Console.ReadLine();
+
+            }
+        }
+        static int Minimax(int depth, int turn, piece tP, piece[] p, int[] sq, int alpha, int beta, int LSF)
+        {
+            int bestScore = -turn;
+            int score;
+            if (Check(LSF, sq, p)) return -turn;
+            else if (squares_available - depth <= 0 || depth >= 4 + 256 / (squares_available * squares_available))
+            {
+                for (int i = 0; i < 16; i++)
+                {
+                    NOC++;
+                    if (sq[i] == -1)
+                    {
+                        tP.place = i;
+                        sq[i] = tP.id;
+                        if (Check(i, sq, p))
+                        {
+                            tP.place = -1;
+                            sq[i] = -1;
+                            return turn;
+                        }
+                        tP.place = -1;
+                        sq[i] = -1;
+                    }
+                }
+                return 0;
+            }
+            for (int i = 0; i < 16; i++)
+            {
+                for (int j = 0; j < 16; j++)
+                {
+                    if (sq[i] == -1 && p[j].place == -1 && j != tP.id)
+                    {
+                        tP.place = i;
+                        sq[i] = tP.id;
+                        NOC++;
+                        score = Minimax(depth + 1, -turn, p[j], p, sq, alpha, beta, i);
+                        bestScore = turn * Math.Max(score * turn, bestScore * turn);
+                        tP.place = -1;
+                        sq[i] = -1;
+                        if (turn == 1)
+                        {
+                            if (bestScore == 1) return bestScore;
+                            alpha = Math.Max(score, alpha);
+                            if (beta <= alpha) return bestScore;
+                        }
+                        else if (turn == -1)
+                        {
+                            if (bestScore == -1) return bestScore;
+                            beta = Math.Min(score, beta);
+                            if (beta <= alpha) return bestScore;
+                        }
+                    }
+                }
+            }
+            return bestScore;
+        }
+        static bool Check(int LSF, int[] sq, piece[] p) //LSF for Last Square Filled
+        {
+            int r = LSF % 4;
+            int q = LSF - r;
+            if(sq[q]!=-1&&sq[q+1]!=-1&& sq[q + 2] != -1&&sq[q + 3] != -1)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[sq[q]].array[j] == p[sq[q + 1]].array[j] &&
+                        p[sq[q]].array[j] == p[sq[q + 2]].array[j] &&
+                        p[sq[q]].array[j] == p[sq[q + 3]].array[j]
+                        )
+                    {
+                        return true;
+                    }
+                }
+            }
+            if (sq[r] != -1 && sq[r + 4] != -1 && sq[r + 8] != -1 && sq[r + 12] != -1)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[sq[r]].array[j] == p[sq[r + 4]].array[j] &&
+                        p[sq[r]].array[j] == p[sq[r + 8]].array[j] &&
+                        p[sq[r]].array[j] == p[sq[r + 12]].array[j]
+                        )
+                    {
+                        return true;
+                    }
+                }
+            }
+            if(LSF%5==0&& sq[0] != -1 && sq[5] != -1 && sq[10] != -1 && sq[15] != -1)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[sq[0]].array[j] == p[sq[5]].array[j] &&
+                        p[sq[0]].array[j] == p[sq[10]].array[j] &&
+                        p[sq[0]].array[j] == p[sq[15]].array[j]
+                        )
+                    {
+                        return true;
+                    }
+                }
+            }
+            else if(LSF%3==0&& sq[3] != -1 && sq[6] != -1 && sq[9] != -1 && sq[12] != -1)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    if (
+                        p[sq[3]].array[j] == p[sq[6]].array[j] &&
+                        p[sq[3]].array[j] == p[sq[9]].array[j] &&
+                        p[sq[3]].array[j] == p[sq[12]].array[j]
+                        )
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        static void PrintBoard()
+        {
+            string[,] b = new string[16, 4];
+            Console.Clear();
+            for (int i = 0; i < 16; i++)
+            {
+                if (squares[i] != -1)
+                {
+                    for (int j = 0; j < 4; j++)
+                    {
+                        b[i, j] = "" + pieces[squares[i]].array[j];
+                    }
+                }
+                else
+                {
+                    for (int j = 0; j < 4; j++)
+                    {
+                        b[i, j] = " ";
+                    }
+                }
+            }
+
+            Console.WriteLine(" " + b[0, 0] + b[0, 1] + "  | " + b[1, 0] + b[1, 1] + "  | " + b[2, 0] + b[2, 1] + "  | " + b[3, 0] + b[3, 1]);
+            Console.WriteLine(" " + b[0, 2] + b[0, 3] + "  | " + b[1, 2] + b[1, 3] + "  | " + b[2, 2] + b[2, 3] + "  | " + b[3, 2] + b[3, 3]);
+            Console.WriteLine("_____|_____|_____|_____");
+            Console.WriteLine(" " + b[4, 0] + b[4, 1] + "  | " + b[5, 0] + b[5, 1] + "  | " + b[6, 0] + b[6, 1] + "  | " + b[7, 0] + b[7, 1]);
+            Console.WriteLine(" " + b[4, 2] + b[4, 3] + "  | " + b[5, 2] + b[5, 3] + "  | " + b[6, 2] + b[6, 3] + "  | " + b[7, 2] + b[7, 3]);
+            Console.WriteLine("_____|_____|_____|_____");
+            Console.WriteLine(" " + b[8, 0] + b[8, 1] + "  | " + b[9, 0] + b[9, 1] + "  | " + b[10, 0] + b[10, 1] + "  | " + b[11, 0] + b[11, 1]);
+            Console.WriteLine(" " + b[8, 2] + b[8, 3] + "  | " + b[9, 2] + b[9, 3] + "  | " + b[10, 2] + b[10, 3] + "  | " + b[11, 2] + b[11, 3]);
+            Console.WriteLine("_____|_____|_____|_____");
+            Console.WriteLine(" " + b[12, 0] + b[12, 1] + "  | " + b[13, 0] + b[13, 1] + "  | " + b[14, 0] + b[14, 1] + "  | " + b[15, 0] + b[15, 1]);
+            Console.WriteLine(" " + b[12, 2] + b[12, 3] + "  | " + b[13, 2] + b[13, 3] + "  | " + b[14, 2] + b[14, 3] + "  | " + b[15, 2] + b[15, 3]);
+            Console.WriteLine("     |     |     |     ");
+            Console.WriteLine("Winner: "+ winner);
+        }
+        static void GeneratePieces()
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                int a, b, c;
+                c = (i - i % 2) / 2;
+                b = (c - c % 2) / 2;
+                a = (b - b % 2) / 2;
+                pieces[i] = new piece(a % 2, b % 2, c % 2, i % 2, i);
+                squares[i] = -1; //the value of -1 indicates that the square is empty.
+                                 //a value between 0 and 15 indicates the id of the piece in it.
+            }
+        }
+    }
+}
